@@ -1,7 +1,5 @@
-# Make sure test_steps is integer
 test_steps <- as.integer(ceiling(test_generator$n / batch_size))
 
-# Evaluate model_1 after fine-tuning
 final_eval1 <- model_1$evaluate(
   test_generator,
   steps = test_steps
@@ -9,7 +7,6 @@ final_eval1 <- model_1$evaluate(
 final_acc1 <- as.numeric(final_eval1[[2]])
 cat("Model 1 final test accuracy:", round(final_acc1,4), "\n")
 
-# And for the others...
 final_eval2 <- model_2$evaluate(test_generator, steps = test_steps)
 final_acc2 <- as.numeric(final_eval2[[2]])
 cat("Model 2 final test accuracy:", round(final_acc2,4), "\n")
@@ -22,21 +19,16 @@ final_eval4 <- model_4$evaluate(test_generator, steps = test_steps)
 final_acc4 <- as.numeric(final_eval4[[2]])
 cat("Model 4 final test accuracy:", round(final_acc4,4), "\n")
 
-
-# Generate new predictions
 pred_probs1_ft <- model_1$predict(test_generator, steps = test_steps)
 pred_probs2_ft <- model_2$predict(test_generator, steps = test_steps)
 pred_probs3_ft <- model_3$predict(test_generator, steps = test_steps)
 pred_probs4_ft <- model_4$predict(test_generator, steps = test_steps)
 
-# Then feed pred_probs*_ft and your true_labels into
-# tune_and_eval() or your confusion/AUC code exactly as before.
 res1_ft <- tune_and_eval(true_labels1, pred_probs1_ft)
 res2_ft <- tune_and_eval(true_labels1, pred_probs2_ft)
 res3_ft <- tune_and_eval(true_labels1, pred_probs3_ft)
 res4_ft <- tune_and_eval(true_labels1, pred_probs4_ft)
 
-# Summarize
 summary_ft <- data.frame(
   Model     = c("ResNet50","EffNetB0","Lightweight+SE","DualAttention"),
   Threshold = c(res1_ft$threshold, res2_ft$threshold, res3_ft$threshold, res4_ft$threshold),

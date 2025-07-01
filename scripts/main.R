@@ -2,6 +2,7 @@ steps_per_epoch <- as.integer(ceiling(train_generator$n / batch_size))
 validation_steps <- as.integer(ceiling(validation_generator$n / batch_size))
 n_epochs          <- as.integer(20)
 
+# Model 1
 history1 <- model_1$fit(
   train_generator,
   steps_per_epoch  = steps_per_epoch,
@@ -14,7 +15,6 @@ history1 <- model_1$fit(
   )
 )
 
-# Pre-compute integers once
 steps_per_epoch <- as.integer(ceiling(train_generator$n / batch_size))
 validation_steps <- as.integer(ceiling(validation_generator$n / batch_size))
 n_epochs         <- as.integer(20)

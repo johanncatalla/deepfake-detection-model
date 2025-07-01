@@ -3,26 +3,21 @@ library(pROC)
 
 test_steps <- as.integer(ceiling(test_generator$n / batch_size))
 
-# 1) Evaluate loss & accuracy
 eval_results1 <- model_1$evaluate(
   test_generator,
   steps = test_steps
 )
 acc1 <- as.numeric(eval_results1[[2]])
 
-# 2) Generate predictions (probabilities)
 pred_probs1 <- model_1$predict(
   test_generator,
   steps = test_steps
 )
 
-# 3) Convert to binary labels (0/1) using 0.5 threshold
 pred_labels1 <- ifelse(pred_probs1 > 0.5, 1L, 0L)
 
-# 4) True labels from the generator
 true_labels1 <- test_generator$classes[1:length(pred_labels1)]
 
-# 5) Confusion matrix & classification metrics
 
 conf_mat1 <- confusionMatrix(
   factor(pred_labels1),
@@ -30,12 +25,9 @@ conf_mat1 <- confusionMatrix(
   positive = "1"
 )
 
-# 6) ROC - AUC
-
 roc1 <- roc(true_labels1, as.numeric(pred_probs1))
 auc1 <- auc(roc1)
 
-# Print summaries
 print(eval_results1)
 print(conf_mat1)
 cat("AUC:", round(auc1, 4), "\n")

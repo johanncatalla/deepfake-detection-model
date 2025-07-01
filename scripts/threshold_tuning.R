@@ -3,16 +3,15 @@ library(caret)
 
 #––– Helper function: tune & evaluate one model –––#
 tune_and_eval <- function(true_labels, pred_probs, positive = 1L) {
-  # 1) Build ROC object
+  
   roc_obj <- roc(true_labels, as.numeric(pred_probs))
   
-  # 2) Find optimal threshold (Youden's J)
   opt <- coords(
     roc_obj, "best",
     ret = c("threshold","sensitivity","specificity"),
     transpose = FALSE
   )
-  # coerce each to a number
+
   thr  <- as.numeric(opt["threshold"])
   sens <- as.numeric(opt["sensitivity"])
   spec <- as.numeric(opt["specificity"])
@@ -23,20 +22,16 @@ tune_and_eval <- function(true_labels, pred_probs, positive = 1L) {
     "Spec:",        round(spec,3), "\n"
   )
   
-  # 3) Apply threshold
   pred_labels_opt <- ifelse(pred_probs >= thr, positive, 1L - positive)
-  
-  # 4) Confusion matrix
+
   cm <- confusionMatrix(
     factor(pred_labels_opt, levels = c(0,1)),
     factor(true_labels,     levels = c(0,1)),
     positive = as.character(positive)
   )
   
-  # 5) AUC
   auc_val <- as.numeric(auc(roc_obj))
-  
-  # 6) Return
+
   list(
     threshold = thr,
     accuracy  = unname(cm$overall["Accuracy"]),
@@ -47,14 +42,6 @@ tune_and_eval <- function(true_labels, pred_probs, positive = 1L) {
     confusion = cm$table
   )
 }
-
-#––– Run for each model –––#
-
-# Assuming you already have:
-#  true_labels1, pred_probs1
-#  true_labels1, pred_probs2
-#  true_labels1, pred_probs3
-#  true_labels1, pred_probs4
 
 res1 <- tune_and_eval(true_labels1, pred_probs1)
 res2 <- tune_and_eval(true_labels1, pred_probs2)
