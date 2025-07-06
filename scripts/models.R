@@ -1,38 +1,34 @@
 library(keras)
 
-focal_loss <- function(gamma = 2.0, alpha = 0.25) {
-  function(y_true, y_pred) {
-    y_pred <- k_clip(y_pred, k_epsilon(), 1 - k_epsilon())
-    pt <- tf$where(tf$equal(y_true, 1), y_pred, 1 - y_pred)
+# Note: used the following config for all models
+# - 380x380 resolution
+# - Binary crossentropy loss
+# - 1e-3 learning rate
+# - 0.5 dropout rate
 
-    loss <- - alpha * k_pow((1 - pt), gamma) * k_log(pt)
-    k_mean(loss)
-  }
-}
-
-# -------------MODEL 1---------------------------------
+# -------------MODEL 1: ResNet50 ---------------------------------
 
 base_resnet <- application_resnet50(
   weights    = "imagenet",
   include_top= FALSE,
-  input_shape= c(224,224,3)
+  input_shape= c(380,380,3)  
 )
 freeze_weights(base_resnet)
 
-inputs <- layer_input(shape = c(224,224,3))
+inputs <- layer_input(shape = c(380,380,3))  
 
 x <- base_resnet(inputs)
 
 x <- x %>%
   layer_global_average_pooling_2d() %>%
-  layer_dropout(0.3) %>%
+  layer_dropout(0.5) %>%  # Changed to 0.5
   layer_dense(1, activation = "sigmoid")
 
 model_1 <- keras_model(inputs = inputs, outputs = x)
 
 model_1$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
-  optimizer = optimizer_adam(learning_rate = 1e-4),
+  loss = "binary_crossentropy", 
+  optimizer = optimizer_adam(learning_rate = 1e-3), 
   metrics   = list("accuracy")
 )
 
@@ -41,28 +37,28 @@ model_1$compile(
 base_effnet <- application_efficientnet_b0(
   weights     = "imagenet",
   include_top = FALSE,
-  input_shape = c(224,224,3)
+  input_shape = c(380,380,3)  
 )
 freeze_weights(base_effnet)
 
-inputs2 <- layer_input(shape = c(224,224,3))
+inputs2 <- layer_input(shape = c(380,380,3))  
 x2      <- base_effnet(inputs2) %>%
   layer_global_average_pooling_2d() %>%
-  layer_dropout(0.3) %>%
+  layer_dropout(0.5) %>%  
   layer_dense(1, activation = "sigmoid")
 
 model_2 <- keras_model(inputs = inputs2, outputs = x2)
 
 model_2$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
-  optimizer = optimizer_adam(learning_rate = 1e-4),
+  loss = "binary_crossentropy",  
+  optimizer = optimizer_adam(learning_rate = 1e-3), 
   metrics   = list("accuracy")
 )
 
 
-# ----------------- MODEL 3: Lightweight CNN + SE -----------------
+# ----------------- MODEL 3: Lightweight CNN + SE  -----------------
 
-inputs3 <- layer_input(shape = c(224,224,3))
+inputs3 <- layer_input(shape = c(380,380,3))  
 
 body3 <- inputs3 %>%
   layer_conv_2d(32, c(3,3), activation = "relu") %>%
@@ -78,14 +74,14 @@ se3 <- gap3 %>%
 
 out3 <- list(gap3, se3) %>%
   layer_multiply() %>%
-  layer_dropout(0.3) %>%
+  layer_dropout(0.5) %>% 
   layer_dense(1, activation = "sigmoid")
 
 model_3 <- keras_model(inputs = inputs3, outputs = out3)
 
 model_3$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
-  optimizer = optimizer_adam(learning_rate = 1e-4),
+  loss = "binary_crossentropy", 
+  optimizer = optimizer_adam(learning_rate = 1e-3),  
   metrics   = list("accuracy")
 )
 
@@ -95,7 +91,7 @@ model_3$compile(
 eff_base <- application_efficientnet_b0(
   weights     = "imagenet",
   include_top = FALSE,
-  input_shape = c(224,224,3)
+  input_shape = c(380,380,3)  
 )
 freeze_weights(eff_base)
 
@@ -120,13 +116,43 @@ x4 <- layer_multiply(list(x4, sa4))
 
 out4 <- x4 %>%
   layer_global_average_pooling_2d() %>%
-  layer_dropout(0.3) %>%
+  layer_dropout(0.5) %>% 
   layer_dense(1, activation = "sigmoid")
 
 model_4 <- keras_model(inputs = inputs4, outputs = out4)
 
 model_4$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
-  optimizer = optimizer_adam(learning_rate = 1e-4),
+  loss = "binary_crossentropy",  
+  optimizer = optimizer_adam(learning_rate = 1e-3),  
   metrics   = list("accuracy")
+)
+
+# ----------------- MODEL 5: EfficientNetB4 -----------------
+
+base_effnetb4 <- application_efficientnet_b4(
+  weights     = "imagenet",
+  include_top = FALSE,
+  input_shape = c(380, 380, 3)
+)
+freeze_weights(base_effnetb4)
+
+inputs5 <- layer_input(shape = c(380, 380, 3))
+x5 <- base_effnetb4(inputs5) %>%
+  layer_global_average_pooling_2d() %>%
+  layer_dropout(0.5) %>%
+  layer_dense(1, activation = "sigmoid")
+
+model_efficientnetb4 <- keras_model(inputs = inputs5, outputs = x5)
+
+model_efficientnetb4$compile(
+  loss = "binary_crossentropy",
+  optimizer = optimizer_adam(learning_rate = 1e-3),
+  metrics = list("accuracy")
+)
+
+reduce_lr_effnetb4 <- callback_reduce_lr_on_plateau(
+  monitor = "val_loss", 
+  factor = 0.2, 
+  patience = 2, 
+  min_lr = 1e-6
 )

@@ -59,6 +59,19 @@ conf_mat4     <- confusionMatrix(factor(pred_labels4), factor(true_labels1), pos
 roc4          <- roc(true_labels1, as.numeric(pred_probs4))
 auc4          <- auc(roc4)
 
+
+#------------------MODEL 5 (EfficientNetB4)------------------------------------------
+eval_results5 <- model_efficientnetb4$evaluate(test_generator, steps = test_steps)
+acc5 <- as.numeric(eval_results5[[2]])
+pred_probs5   <- model_efficientnetb4$predict(test_generator, steps = test_steps)
+pred_labels5  <- ifelse(pred_probs5 > 0.5, 1L, 0L)
+
+true_labels5 <- true_labels1
+
+conf_mat5     <- confusionMatrix(factor(pred_labels5), factor(true_labels5), positive = "1")
+roc5          <- roc(true_labels5, as.numeric(pred_probs5))
+auc5          <- auc(roc5)
+
 #---------------------------------------------------------------------
 
 fix_na0 <- function(x) if (is.na(x)) 0 else unname(x)
@@ -67,26 +80,28 @@ prec1 <- fix_na0(conf_mat1$byClass["Precision"])
 prec2 <- fix_na0(conf_mat2$byClass["Precision"])
 prec3 <- fix_na0(conf_mat3$byClass["Precision"])
 prec4 <- fix_na0(conf_mat4$byClass["Precision"])
+prec5 <- fix_na0(conf_mat5$byClass["Precision"])
 
 recall1 <- fix_na0(conf_mat1$byClass["Recall"])
 recall2 <- fix_na0(conf_mat2$byClass["Recall"])
 recall3 <- fix_na0(conf_mat3$byClass["Recall"])
 recall4 <- fix_na0(conf_mat4$byClass["Recall"])
+recall5 <- fix_na0(conf_mat5$byClass["Recall"])
 
 f11 <- fix_na0(conf_mat1$byClass["F1"])
 f12 <- fix_na0(conf_mat2$byClass["F1"])
 f13 <- fix_na0(conf_mat3$byClass["F1"])
 f14 <- fix_na0(conf_mat4$byClass["F1"])
+f15 <- fix_na0(conf_mat5$byClass["F1"])
 
 
 #-------------------- SUMMARY TABLE----------------------------------
 results_summary <- data.frame(
-  Model     = c("ResNet50", "EffNetB0", "Lightweight+SE", "DualAttention"),
-  Accuracy  = c(acc1, acc2, acc3, acc4),
-  Precision = c(prec1, prec2, prec3, prec4),
-  Recall    = c(recall1, recall2, recall3, recall4),
-  F1        = c(f11,  f12,  f13,  f14),
-  AUC       = c(auc1,  auc2,  auc3,  auc4)
+  Model     = c("ResNet50", "EffNetB0", "Lightweight+SE", "DualAttention", "EfficientNetB4"),
+  Accuracy  = c(acc1, acc2, acc3, acc4, acc5),
+  Precision = c(prec1, prec2, prec3, prec4, prec5),
+  Recall    = c(recall1, recall2, recall3, recall4, recall5),
+  F1        = c(f11,  f12,  f13,  f14,  f15),
+  AUC       = c(auc1,  auc2,  auc3,  auc4,  auc5)
 )
 print(results_summary)
-

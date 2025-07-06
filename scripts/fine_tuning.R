@@ -1,3 +1,17 @@
+
+if (!exists("class_weights")) {
+  cat("Class weights not found. Calculating class weights...\n")
+  tbl <- table(train_generator$classes)
+  total <- sum(tbl)
+  
+  class_weights <- list(
+    "0" = as.numeric(total / (2 * tbl["0"])),
+    "1" = as.numeric(total / (2 * tbl["1"]))
+  )
+  print("Class weights calculated:")
+  print(class_weights)
+}
+
 n_fine_tune <- 50
 
 
@@ -15,7 +29,7 @@ for (i in (freeze_until+1):total_layers) {
 }
 
 model_1$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
+  loss = "binary_crossentropy",
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
@@ -33,11 +47,11 @@ history_fine1 <- model_1$fit(
   class_weight     = class_weights,
   callbacks = list(
     callback_early_stopping(monitor = "val_loss", patience = 3),
-    callback_reduce_lr_on_plateau()
+    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
   )
 )
 
-#––––– 2) EFFICIENTNETB0 (MODEL 2) FINE-TUNING –––––#
+#––––– 2) EFFICIENTNETB0 (MODEL 2) FINE-TUNING  –––––#
 total_layers <- length(base_effnet$layers)
 freeze_until <- total_layers - n_fine_tune
 
@@ -51,13 +65,13 @@ for (i in (freeze_until+1):length(base_effnet$layers)) {
 }
 
 model_2$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
+  loss = "binary_crossentropy",
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
 steps_per_epoch   <- as.integer(train_generator$n %/% batch_size)
 validation_steps  <- as.integer(validation_generator$n %/% batch_size)
-n_fine_epochs     <- as.integer(10)    # or simply 10L
+n_fine_epochs     <- as.integer(10)   
 
 #––– Fine-tune Model 2 –––#
 history_fine2 <- model_2$fit(
@@ -69,11 +83,11 @@ history_fine2 <- model_2$fit(
   class_weight     = class_weights,
   callbacks = list(
     callback_early_stopping(monitor = "val_loss", patience = 3L),
-    callback_reduce_lr_on_plateau()
+    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
   )
 )
 
-#––––– 3) LIGHTWEIGHT CNN + SE (MODEL 3) FINE-TUNING –––––#
+#––––– 3) LIGHTWEIGHT CNN + SE (MODEL 3) FINE-TUNING (EfficientNetB4 Config) –––––#
 
 n_fine_tune   <- as.integer(30)
 total_layers3 <- length(model_3$layers)
@@ -96,7 +110,7 @@ for (i in seq.int(start_unfreeze, end_unfreeze)) {
 }
 
 model_3$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
+  loss = "binary_crossentropy",
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
@@ -113,11 +127,11 @@ history_fine3 <- model_3$fit(
   class_weight     = class_weights,
   callbacks = list(
     callback_early_stopping(monitor = "val_loss", patience = 3),
-    callback_reduce_lr_on_plateau()
+    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
   )
 )
 
-#––––– 4) DUAL-ATTENTION (MODEL 4) FINE-TUNING –––––#
+#––––– 4) DUAL-ATTENTION (MODEL 4) FINE-TUNING  –––––#
 
 # --- Hyperparameters ---
 n_fine_tune     <- as.integer(30)            
@@ -139,7 +153,7 @@ for(i in (freeze_until4+1):total_layers4) {
 }
 
 model_4$compile(
-  loss = focal_loss(gamma=2, alpha=0.25),
+  loss = "binary_crossentropy",
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
@@ -153,6 +167,64 @@ history_fine4 <- model_4$fit(
   class_weight     = class_weights,
   callbacks = list(
     callback_early_stopping(monitor  = "val_loss", patience = 3L),
-    callback_reduce_lr_on_plateau()
+    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
   )
+)
+
+# ----------------- Fine-tune EfficientNetB4 Model -----------------
+
+# unfreeze the last 20 layers of the base model
+fine_tune_at_effnetb4 <- -20
+
+# unfreeze the selected layers for fine-tuning
+for (i in seq_len(length(base_effnetb4$layers) + fine_tune_at_effnetb4)) {
+  layer_i <- base_effnetb4$layers[[i]]
+  py_set_attr(layer_i, "trainable", FALSE)
+}
+for (i in (length(base_effnetb4$layers) + fine_tune_at_effnetb4 + 1):length(base_effnetb4$layers)) {
+  layer_i <- base_effnetb4$layers[[i]]
+  # don't unfreeze batch norm layers
+  if (!inherits(layer_i, "BatchNormalization")) {
+    py_set_attr(layer_i, "trainable", TRUE)
+  }
+}
+
+# specify a lower learning rate for the fine-tuned layers
+optimizer_fine <- optimizer_adam(learning_rate = 1e-5)
+model_efficientnetb4$compile(
+  loss = "binary_crossentropy",
+  optimizer = optimizer_fine,
+  metrics = list("accuracy")
+)
+
+steps_per_epoch_effnetb4 <- as.integer(train_generator$n / batch_size)
+validation_steps_effnetb4 <- as.integer(validation_generator$n / batch_size)
+n_fine_epochs_effnetb4 <- as.integer(10)
+
+# set up learning rate reduction scheduler
+reduce_lr_fine <- callback_reduce_lr_on_plateau(
+  monitor = "val_loss", 
+  factor = 0.2, 
+  patience = 2,
+  min_lr = 1e-6
+)
+
+# ModelCheckpoint callback to save the best model
+checkpoint_callback <- callback_model_checkpoint(
+  filepath = "best_model_fc.keras",
+  monitor = "val_loss",
+  save_best_only = TRUE,
+  mode = "min",
+  verbose = 1
+)
+
+# train the model with fine-tuning
+history_fine_effnetb4 <- model_efficientnetb4$fit(
+  train_generator,
+  steps_per_epoch  = steps_per_epoch_effnetb4,
+  epochs           = n_fine_epochs_effnetb4,
+  validation_data  = validation_generator,
+  validation_steps = validation_steps_effnetb4,
+  class_weight     = class_weights,
+  callbacks        = list(reduce_lr_fine, checkpoint_callback)
 )

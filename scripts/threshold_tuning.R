@@ -47,17 +47,18 @@ res1 <- tune_and_eval(true_labels1, pred_probs1)
 res2 <- tune_and_eval(true_labels1, pred_probs2)
 res3 <- tune_and_eval(true_labels1, pred_probs3)
 res4 <- tune_and_eval(true_labels1, pred_probs4)
+res5 <- tune_and_eval(true_labels1, pred_probs5)  
 
 #––– Summarize–––#
 
 summary_df <- data.frame(
-  Model      = c("ResNet50", "EffNetB0", "Lightweight+SE", "DualAttention"),
-  Threshold  = c(res1$threshold, res2$threshold, res3$threshold, res4$threshold),
-  Accuracy   = c(res1$accuracy,  res2$accuracy,  res3$accuracy,  res4$accuracy),
-  Precision  = c(res1$precision, res2$precision, res3$precision, res4$precision),
-  Recall     = c(res1$recall,    res2$recall,    res3$recall,    res4$recall),
-  F1         = c(res1$F1,        res2$F1,        res3$F1,        res4$F1),
-  AUC        = c(res1$AUC,       res2$AUC,       res3$AUC,       res4$AUC)
+  Model      = c("ResNet50", "EffNetB0", "Lightweight+SE", "DualAttention", "EfficientNetB4"),
+  Threshold  = c(res1$threshold, res2$threshold, res3$threshold, res4$threshold, res5$threshold),
+  Accuracy   = c(res1$accuracy,  res2$accuracy,  res3$accuracy,  res4$accuracy,  res5$accuracy),
+  Precision  = c(res1$precision, res2$precision, res3$precision, res4$precision, res5$precision),
+  Recall     = c(res1$recall,    res2$recall,    res3$recall,    res4$recall,    res5$recall),
+  F1         = c(res1$F1,        res2$F1,        res3$F1,        res4$F1,        res5$F1),
+  AUC        = c(res1$AUC,       res2$AUC,       res3$AUC,       res4$AUC,       res5$AUC)
 )
 
 print(summary_df)
