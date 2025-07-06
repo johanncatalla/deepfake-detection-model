@@ -1,4 +1,3 @@
-
 if (!exists("class_weights")) {
   cat("Class weights not found. Calculating class weights...\n")
   tbl <- table(train_generator$classes)
@@ -11,6 +10,15 @@ if (!exists("class_weights")) {
   print("Class weights calculated:")
   print(class_weights)
 }
+
+# ModelCheckpoint callback for fine-tuning
+checkpoint_callback_fine <- callback_model_checkpoint(
+  filepath = "best_model_fine_tuned.keras",
+  monitor = "val_loss",
+  save_best_only = TRUE,
+  mode = "min",
+  verbose = 1
+)
 
 n_fine_tune <- 50
 
@@ -28,15 +36,27 @@ for (i in (freeze_until+1):total_layers) {
   py_set_attr(layer_i, "trainable", TRUE)
 }
 
+# Focal loss implementation (must match models.R)
+focal_loss <- function(gamma = 2., alpha = 0.25) {
+  function(y_true, y_pred) {
+    epsilon <- k_epsilon()
+    y_pred <- k_clip(y_pred, epsilon, 1.0 - epsilon)
+    pt_1 <- tf$where(k_equal(y_true, 1), y_pred, k_ones_like(y_pred))
+    pt_0 <- tf$where(k_equal(y_true, 0), y_pred, k_zeros_like(y_pred))
+    loss <- -alpha * k_pow(1. - pt_1, gamma) * k_log(pt_1) - (1 - alpha) * k_pow(pt_0, gamma) * k_log(1. - pt_0)
+    k_mean(loss)
+  }
+}
+
 model_1$compile(
-  loss = "binary_crossentropy",
+  loss = focal_loss(),
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
 
-steps_per_epoch   <- as.integer(train_generator$n %/% batch_size)
-validation_steps  <- as.integer(validation_generator$n %/% batch_size)
-n_fine_epochs     <- as.integer(10)
+steps_per_epoch   <- as.integer(ceiling(train_generator$n / batch_size))
+validation_steps  <- as.integer(ceiling(validation_generator$n / batch_size))
+n_fine_epochs     <- as.integer(15)
 
 history_fine1 <- model_1$fit(
   train_generator,
@@ -46,8 +66,9 @@ history_fine1 <- model_1$fit(
   validation_steps = validation_steps,
   class_weight     = class_weights,
   callbacks = list(
-    callback_early_stopping(monitor = "val_loss", patience = 3),
-    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
+    callback_early_stopping(monitor = "val_loss", patience = 5),
+    callback_reduce_lr_on_plateau(monitor = "val_loss", factor = 0.5, patience = 3, min_lr = 1e-7),
+    checkpoint_callback_fine
   )
 )
 
@@ -65,13 +86,10 @@ for (i in (freeze_until+1):length(base_effnet$layers)) {
 }
 
 model_2$compile(
-  loss = "binary_crossentropy",
+  loss = focal_loss(),
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
-steps_per_epoch   <- as.integer(train_generator$n %/% batch_size)
-validation_steps  <- as.integer(validation_generator$n %/% batch_size)
-n_fine_epochs     <- as.integer(10)   
 
 #––– Fine-tune Model 2 –––#
 history_fine2 <- model_2$fit(
@@ -82,16 +100,15 @@ history_fine2 <- model_2$fit(
   validation_steps = validation_steps,
   class_weight     = class_weights,
   callbacks = list(
-    callback_early_stopping(monitor = "val_loss", patience = 3L),
-    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
+    callback_early_stopping(monitor = "val_loss", patience = 5),
+    callback_reduce_lr_on_plateau(monitor = "val_loss", factor = 0.5, patience = 3, min_lr = 1e-7),
+    checkpoint_callback_fine
   )
 )
 
-#––––– 3) LIGHTWEIGHT CNN + SE (MODEL 3) FINE-TUNING (EfficientNetB4 Config) –––––#
+#––––– 3) LIGHTWEIGHT CNN + SE (MODEL 3) FINE-TUNING –––––#
 
 n_fine_tune   <- as.integer(30)
-total_layers3 <- length(model_3$layers)
-
 total_layers3 <- length(model_3$layers)
 
 freeze_until3 <- as.integer(total_layers3 - n_fine_tune)
@@ -110,14 +127,12 @@ for (i in seq.int(start_unfreeze, end_unfreeze)) {
 }
 
 model_3$compile(
-  loss = "binary_crossentropy",
+  loss = focal_loss(),
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
-n_fine_epochs     <- as.integer(10)  
-steps_per_epoch   <- as.integer(train_generator$n %/% batch_size)
-validation_steps  <- as.integer(validation_generator$n %/% batch_size)
-# 4d) Fine-tune
+
+# Fine-tune Model 3
 history_fine3 <- model_3$fit(
   train_generator,
   steps_per_epoch  = steps_per_epoch,
@@ -126,8 +141,9 @@ history_fine3 <- model_3$fit(
   validation_steps = validation_steps,
   class_weight     = class_weights,
   callbacks = list(
-    callback_early_stopping(monitor = "val_loss", patience = 3),
-    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
+    callback_early_stopping(monitor = "val_loss", patience = 5),
+    callback_reduce_lr_on_plateau(monitor = "val_loss", factor = 0.5, patience = 3, min_lr = 1e-7),
+    checkpoint_callback_fine
   )
 )
 
@@ -135,9 +151,6 @@ history_fine3 <- model_3$fit(
 
 # --- Hyperparameters ---
 n_fine_tune     <- as.integer(30)            
-n_fine_epochs   <- as.integer(10)             
-steps_per_epoch <- as.integer(train_generator$n %/% batch_size)
-validation_steps<- as.integer(validation_generator$n %/% batch_size)
 
 total_layers4  <- length(eff_base$layers)
 freeze_until4  <- total_layers4 - n_fine_tune
@@ -153,7 +166,7 @@ for(i in (freeze_until4+1):total_layers4) {
 }
 
 model_4$compile(
-  loss = "binary_crossentropy",
+  loss = focal_loss(),
   optimizer = optimizer_adam(learning_rate = 1e-5),
   metrics   = list("accuracy")
 )
@@ -166,8 +179,9 @@ history_fine4 <- model_4$fit(
   validation_steps = validation_steps,
   class_weight     = class_weights,
   callbacks = list(
-    callback_early_stopping(monitor  = "val_loss", patience = 3L),
-    callback_reduce_lr_on_plateau(factor = 0.2, patience = 2, min_lr = 1e-6)
+    callback_early_stopping(monitor  = "val_loss", patience = 5),
+    callback_reduce_lr_on_plateau(monitor = "val_loss", factor = 0.5, patience = 3, min_lr = 1e-7),
+    checkpoint_callback_fine
   )
 )
 
@@ -192,39 +206,58 @@ for (i in (length(base_effnetb4$layers) + fine_tune_at_effnetb4 + 1):length(base
 # specify a lower learning rate for the fine-tuned layers
 optimizer_fine <- optimizer_adam(learning_rate = 1e-5)
 model_efficientnetb4$compile(
-  loss = "binary_crossentropy",
+  loss = focal_loss(),
   optimizer = optimizer_fine,
   metrics = list("accuracy")
 )
 
-steps_per_epoch_effnetb4 <- as.integer(train_generator$n / batch_size)
-validation_steps_effnetb4 <- as.integer(validation_generator$n / batch_size)
-n_fine_epochs_effnetb4 <- as.integer(10)
-
-# set up learning rate reduction scheduler
-reduce_lr_fine <- callback_reduce_lr_on_plateau(
-  monitor = "val_loss", 
-  factor = 0.2, 
-  patience = 2,
-  min_lr = 1e-6
-)
-
-# ModelCheckpoint callback to save the best model
-checkpoint_callback <- callback_model_checkpoint(
-  filepath = "best_model_fc.keras",
-  monitor = "val_loss",
-  save_best_only = TRUE,
-  mode = "min",
-  verbose = 1
-)
+n_fine_epochs_effnetb4 <- as.integer(15)
 
 # train the model with fine-tuning
 history_fine_effnetb4 <- model_efficientnetb4$fit(
   train_generator,
-  steps_per_epoch  = steps_per_epoch_effnetb4,
+  steps_per_epoch  = steps_per_epoch,
   epochs           = n_fine_epochs_effnetb4,
   validation_data  = validation_generator,
-  validation_steps = validation_steps_effnetb4,
+  validation_steps = validation_steps,
   class_weight     = class_weights,
-  callbacks        = list(reduce_lr_fine, checkpoint_callback)
+  callbacks        = list(
+    callback_early_stopping(monitor = "val_loss", patience = 5),
+    callback_reduce_lr_on_plateau(monitor = "val_loss", factor = 0.5, patience = 3, min_lr = 1e-7),
+    checkpoint_callback_fine
+  )
+)
+
+#––––– 5) MobileNetV2 FINE-TUNING –––––#
+n_fine_tune_mobilenetv2 <- as.integer(30)
+total_layers_mobilenetv2 <- length(base_mobilenetv2$layers)
+freeze_until_mobilenetv2 <- total_layers_mobilenetv2 - n_fine_tune_mobilenetv2
+
+for (i in seq_len(freeze_until_mobilenetv2)) {
+  layer_i <- base_mobilenetv2$layers[[i]]
+  py_set_attr(layer_i, "trainable", FALSE)
+}
+for (i in (freeze_until_mobilenetv2+1):total_layers_mobilenetv2) {
+  layer_i <- base_mobilenetv2$layers[[i]]
+  py_set_attr(layer_i, "trainable", TRUE)
+}
+
+model_mobilenetv2$compile(
+  loss = focal_loss(),
+  optimizer = optimizer_adam(learning_rate = 1e-5),
+  metrics = list("accuracy")
+)
+
+history_fine_mobilenetv2 <- model_mobilenetv2$fit(
+  train_generator,
+  steps_per_epoch  = steps_per_epoch,
+  epochs           = n_fine_epochs,
+  validation_data  = validation_generator,
+  validation_steps = validation_steps,
+  class_weight     = class_weights,
+  callbacks = list(
+    callback_early_stopping(monitor = "val_loss", patience = 5),
+    callback_reduce_lr_on_plateau(monitor = "val_loss", factor = 0.5, patience = 3, min_lr = 1e-7),
+    checkpoint_callback_fine
+  )
 )
